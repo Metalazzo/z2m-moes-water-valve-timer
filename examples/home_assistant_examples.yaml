@@ -1,0 +1,81 @@
+# Home Assistant usage examples
+#
+# The external converter creates a `number` entity named after your valve, e.g.
+#   number.arrosage_prog_irrigation_timer
+# It writes the valve firmware auto-off timer, in SECONDS (1..86400).
+# Adapt the entity_id below to your own valve.
+#
+# These are examples only — adjust names/values to your setup.
+
+# ---------------------------------------------------------------------------
+# 1) Plain service call: set the firmware auto-off cap to 2 hours (7200 s)
+# ---------------------------------------------------------------------------
+action: number.set_value
+target:
+  entity_id: number.arrosage_prog_irrigation_timer
+data:
+  value: 7200
+
+# ---------------------------------------------------------------------------
+# 2) Automation: 20-minute watering run every other morning at 07:00
+#    - the firmware cap is set slightly above the run time as a backstop
+#      (if Home Assistant fails mid-run, the valve still closes by itself)
+# ---------------------------------------------------------------------------
+automation:
+  - alias: "Irrigation matin (20 min)"
+    id: irrigation_matin_20min
+    mode: single
+    triggers:
+      - trigger: time
+        at: "07:00:00"
+    conditions:
+      - condition: time
+        weekday:
+          - mon
+          - wed
+          - fri
+    actions:
+      # backstop: never leave the valve open longer than 25 minutes
+      - action: number.set_value
+        target:
+          entity_id: number.arrosage_prog_irrigation_timer
+        data:
+          value: 1500
+      - action: switch.turn_on
+        target:
+          entity_id: switch.arrosage_prog
+      - delay:
+          minutes: 20
+      - action: switch.turn_off
+        target:
+          entity_id: switch.arrosage_prog
+
+# ---------------------------------------------------------------------------
+# 3) Automation: set a long backstop before a "pool top-up" script
+#    (e.g. 2 hours; the script closes the valve earlier on its own)
+# ---------------------------------------------------------------------------
+automation:
+  - alias: "Piscine - complément d'eau (30 min max)"
+    id: piscine_complement
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: input_button.piscine_complement   # whatever starts your top-up
+    actions:
+      - action: number.set_value
+        target:
+          entity_id: number.arrosage_prog_irrigation_timer
+        data:
+          value: 7200        # firmware safety cap: 2 h
+      - action: switch.turn_on
+        target:
+          entity_id: switch.arrosage_prog
+      - delay:
+          minutes: 30        # desired top-up duration
+      - action: switch.turn_off
+        target:
+          entity_id: switch.arrosage_prog
+      - action: persistent_notification.create
+        data:
+          title: "Piscine"
+          message: "Complément d'eau terminé."
